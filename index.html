@@ -80,7 +80,7 @@
             .progress-fill { background: #333 !important; }
             body { background: white !important; color: black !important; }
             #emi-cards-display { display: block !important; }
-            #emi-chart-display, .chart-grid { display: none !important; }
+            .chart-grid { display: none !important; }
         }
     </style>
 </head>
@@ -91,13 +91,12 @@
         <button class="nav-btn active" onclick="switchTab('dashboard-tab', this)">🏠 Dashboard</button>
         <button class="nav-btn" onclick="switchTab('emi-tab', this)">📊 EMI Tracker</button>
         <button class="nav-btn" onclick="switchTab('sub-tab', this)">🔔 Subscriptions</button>
-        <!-- NEW LEDGER TAB BUTTON -->
         <button class="nav-btn" onclick="switchTab('history-tab', this)">📜 Full Ledger</button>
         <button class="nav-btn" onclick="switchTab('config-tab', this)">⚙️ Settings</button>
     </div>
 
     <div class="main-content">
-        <!-- DASHBOARD -->
+        <!-- DASHBOARD (LANDING PAGE) -->
         <div id="dashboard-tab" class="tab-content active">
             <div class="card bg-danger-card" style="color:white; text-align:center; padding: 30px;">
                 <button class="download-btn" title="Download Dashboard" onclick="window.print()">⬇️</button>
@@ -113,7 +112,20 @@
                 </div>
                 <button class="btn-action bg-secondary" onclick="handleNewTransaction()">Add Record</button>
             </div>
-            <div id="trans-list"></div>
+
+            <!-- NEW DASHBOARD CHARTS (Replaced the trans-list) -->
+            <div class="chart-grid">
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="dashEmiChart"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="dashSubChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- EMI SECTION -->
@@ -140,27 +152,20 @@
                 <button id="del-emi-btn" style="display:none;" class="btn-action bg-danger-card" onclick="deleteItem('emis', document.getElementById('edit-id').value); resetEMIForm();">Delete Loan</button>
             </div>
 
-            <!-- VIEW TOGGLES -->
             <div class="view-toggles">
                 <button class="view-btn active" onclick="setEmiView('cards', this)">Cards</button>
                 <button class="view-btn" onclick="setEmiView('table', this)">Table</button>
                 <button class="view-btn" onclick="setEmiView('chart', this)">Charts</button>
             </div>
 
-            <!-- DATA DISPLAYS -->
             <div id="emi-cards-display"></div>
             <div id="emi-table-display" style="display:none; overflow-x: auto;"></div>
             
-            <!-- MULTI-CHART DISPLAY -->
             <div id="emi-chart-display" style="display:none;">
                 <div class="chart-grid">
-                    <div class="card">
-                        <canvas id="emiChart"></canvas>
-                    </div>
+                    <div class="card"><canvas id="emiChart"></canvas></div>
                     <div class="card" style="display: flex; justify-content: center; align-items: center;">
-                        <div style="width: 100%; max-width: 300px;">
-                            <canvas id="emiPieChart"></canvas>
-                        </div>
+                        <div style="width: 100%; max-width: 300px;"><canvas id="emiPieChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -189,7 +194,7 @@
             <div id="sub-display"></div>
         </div>
 
-        <!-- NEW FULL LEDGER SECTION -->
+        <!-- FULL LEDGER SECTION -->
         <div id="history-tab" class="tab-content">
             <div class="hero-row">
                 <div class="hero-bar bg-primary">
@@ -249,7 +254,11 @@
         let currentEmiView = 'cards'; 
         let emiChartInstance = null;  
         let emiPieChartInstance = null;
-        let histPieChartInstance = null; // New history chart
+        let histPieChartInstance = null; 
+        
+        // New dashboard chart instances
+        let dashEmiChartInstance = null;
+        let dashSubChartInstance = null;
 
         function fmt(num) { return data.currency + Math.abs(parseFloat(num)).toLocaleString(undefined, {minimumFractionDigits: 2}); }
 
@@ -258,15 +267,17 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             btn.classList.add('active');
-            // If they click the history tab, render the chart so it sizes correctly
+            
+            // Re-render charts based on active tab to ensure correct canvas sizing
+            if(id === 'dashboard-tab') renderDashboardCharts();
             if(id === 'history-tab') renderHistoryChart();
         }
 
         function setTheme(t) { 
             document.body.className = t === 'default' ? '' : 'theme-' + t; 
             localStorage.setItem('f_theme', t); 
+            if(document.getElementById('dashboard-tab').classList.contains('active')) renderDashboardCharts();
             if(currentEmiView === 'chart') renderEmiCharts(); 
-            // Also redraw history chart on theme change
             if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
         }
         
@@ -319,10 +330,13 @@
 
             const curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
 
-            // Total Expense
+            // Total Expense (Dashboard)
             let totalExp = 0;
             data.transactions.forEach(t => { if(t.amt < 0) totalExp += t.amt; });
             document.getElementById('total-expense').innerText = fmt(totalExp);
+
+            // Render new Dashboard Charts
+            renderDashboardCharts();
 
             // EMI Logic
             let eHist = 0, eMonth = 0, eRemaining = 0;
@@ -377,7 +391,7 @@
                     <button class="del-btn" onclick="removeItem('subs', ${s.id})">✕</button></div></div>`;
             });
 
-            // NEW: FULL HISTORY/LEDGER LOGIC
+            // FULL HISTORY/LEDGER LOGIC
             let histIncome = 0, histSpent = 0;
             let catEmi = 0, catSub = 0, catReg = 0;
 
@@ -394,16 +408,13 @@
 
             document.getElementById('hist-income').innerText = fmt(histIncome);
             document.getElementById('hist-spent').innerText = fmt(histSpent);
-            // Color Net Balance based on positive or negative
             const netBal = histIncome - histSpent;
             document.getElementById('hist-net').innerText = fmt(netBal);
             
-            // Build the master table
             let histHtml = `<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr>`;
             if (data.transactions.length === 0) {
                 histHtml += `<tr><td colspan="4" style="text-align:center;">No transactions found.</td></tr>`;
             }
-            // Reverse so newest transactions are at the top
             data.transactions.slice().reverse().forEach(t => {
                 let d = new Date(t.date).toLocaleDateString();
                 let color = t.amt < 0 ? '#e74c3c' : '#2ecc71';
@@ -417,20 +428,77 @@
             histHtml += `</table>`;
             document.getElementById('full-history-table').innerHTML = histHtml;
 
-            // Save values to globals so Chart can grab them easily
             window.histCatData = [catReg, catEmi, catSub];
             if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
+        }
 
-            // Transactions Mini-List (Dashboard)
-            const tList = document.getElementById('trans-list');
-            tList.innerHTML = '<h3>Recent Activity</h3>';
-            data.transactions.slice().reverse().forEach(t => {
-                tList.innerHTML += `<div class="card" style="padding:10px; display:flex; justify-content:space-between; font-size:0.8rem">
-                    <span>${t.desc}</span>
-                    <div style="display:flex; gap:15px; align-items:center">
-                        <b style="color:${t.amt < 0 ? '#e74c3c' : '#2ecc71'}">${fmt(t.amt)}</b>
-                        <button class="del-btn" style="padding:2px 6px" onclick="removeItem('transactions', ${t.id})">✕</button>
-                    </div></div>`;
+        // NEW: Draw Dashboard Summary Charts
+        function renderDashboardCharts() {
+            if(!document.getElementById('dashboard-tab').classList.contains('active')) return;
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+
+            // 1. Dashboard EMI Chart (Aggregate)
+            let totalEmiPlan = 0, totalEmiPaid = 0;
+            data.emis.forEach(e => {
+                totalEmiPlan += e.total;
+                totalEmiPaid += e.paid;
+            });
+            let totalEmiLeft = Math.max(0, totalEmiPlan - totalEmiPaid);
+
+            const ctxEmi = document.getElementById('dashEmiChart').getContext('2d');
+            if (dashEmiChartInstance) dashEmiChartInstance.destroy();
+            dashEmiChartInstance = new Chart(ctxEmi, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Amount Paid', 'Left to Pay'],
+                    datasets: [{
+                        data: totalEmiPlan > 0 ? [totalEmiPaid, totalEmiLeft] : [0, 1], // fallback if empty
+                        backgroundColor: ['#2ecc71', '#e74c3c'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: textColor } },
+                        title: { display: true, text: `All EMI Plans (Total: ${fmt(totalEmiPlan)})`, color: textColor }
+                    }
+                }
+            });
+
+            // 2. Dashboard Subs Chart (Aggregate Monthly)
+            let totalMonthlySubs = 0;
+            data.subs.forEach(s => totalMonthlySubs += s.amt);
+
+            let subsPaidThisMonth = 0;
+            const curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
+            data.transactions.forEach(t => {
+                let d = new Date(t.date);
+                if(t.desc.startsWith("Sub:") && d.getMonth() === curMonth && d.getFullYear() === curYear) {
+                    subsPaidThisMonth += Math.abs(t.amt);
+                }
+            });
+            let subsLeftThisMonth = Math.max(0, totalMonthlySubs - subsPaidThisMonth);
+
+            const ctxSub = document.getElementById('dashSubChart').getContext('2d');
+            if (dashSubChartInstance) dashSubChartInstance.destroy();
+            dashSubChartInstance = new Chart(ctxSub, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Paid This Month', 'Left This Month'],
+                    datasets: [{
+                        data: totalMonthlySubs > 0 ? [subsPaidThisMonth, subsLeftThisMonth] : [0, 1],
+                        backgroundColor: ['#3498db', '#f39c12'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: textColor } },
+                        title: { display: true, text: `Monthly Subs (Total: ${fmt(totalMonthlySubs)})`, color: textColor }
+                    }
+                }
             });
         }
 
@@ -471,7 +539,7 @@
             });
         }
 
-        // Draws the new History/Ledger Spending Chart
+        // Draws the History/Ledger Spending Chart
         function renderHistoryChart() {
             if(!window.histCatData) return;
             const ctx = document.getElementById('historyPieChart').getContext('2d');
