@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinancePro | Take Control of Your Money</title>
+    <style>
+        :root {
+            --primary: #2ecc71;
+            --dark: #2c3e50;
+            --light: #f4f7f6;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: white;
+        }
+        header {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(135deg, #2c3e50 0%, #000000 100%);
+            color: white;
+            padding: 0 20px;
+        }
+        h1 { font-size: 3.5rem; margin-bottom: 10px; color: var(--primary); }
+        p.subtitle { font-size: 1.2rem; max-width: 600px; margin-bottom: 30px; opacity: 0.9; }
+        
+        .cta-btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 15px 40px;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .cta-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(46, 204, 113, 0.3);
+        }
+
+        .features {
+            padding: 80px 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+        }
+        .feature-card {
+            text-align: center;
+            padding: 20px;
+        }
+        .feature-card h3 { color: var(--primary); }
+        
+        footer {
+            text-align: center;
+            padding: 40px;
+            background: var(--light);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>FinancePro</h1>
+        <p class="subtitle">A private, secure, and beautiful way to track your expenses, EMIs, and subscriptions. No cloud, no tracking, just your data.</p>
+        <a href="app.html" class="cta-btn">Open App Now — It's Free</a>
+    </header>
+
+    <section class="features">
+        <div class="feature-card">
+            <h3>🔒 100% Private</h3>
+            <p>Your financial data never leaves your computer. We use local browser storage to keep your secrets safe.</p>
+        </div>
+        <div class="feature-card">
+            <h3>📊 EMI Tracker</h3>
+            <p>Visualize your loan progress with beautiful progress bars and automated payment logging.</p>
+        </div>
+        <div class="feature-card">
+            <h3>🎨 Personal Themes</h3>
+            <p>Switch between Light, Dark, Glass, and Nord themes to match your personal style.</p>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2026 FinancePro. Built for privacy and speed.</p>
+    </footer>
+
+</body>
+</html>
