@@ -49,7 +49,7 @@
 
         /* MULTI-CHART LAYOUT */
         .chart-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-        @media (min-width: 768px) { .chart-grid { grid-template-columns: 1fr 1fr; } } /* Side-by-side on desktop */
+        @media (min-width: 768px) { .chart-grid { grid-template-columns: 1fr 1fr; } }
 
         /* BUTTONS */
         .download-btn { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 35px; height: 35px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: 0.2s; z-index: 10; }
@@ -80,7 +80,7 @@
             .progress-fill { background: #333 !important; }
             body { background: white !important; color: black !important; }
             #emi-cards-display { display: block !important; }
-            #emi-chart-display { display: none !important; }
+            #emi-chart-display, .chart-grid { display: none !important; }
         }
     </style>
 </head>
@@ -91,6 +91,8 @@
         <button class="nav-btn active" onclick="switchTab('dashboard-tab', this)">🏠 Dashboard</button>
         <button class="nav-btn" onclick="switchTab('emi-tab', this)">📊 EMI Tracker</button>
         <button class="nav-btn" onclick="switchTab('sub-tab', this)">🔔 Subscriptions</button>
+        <!-- NEW LEDGER TAB BUTTON -->
+        <button class="nav-btn" onclick="switchTab('history-tab', this)">📜 Full Ledger</button>
         <button class="nav-btn" onclick="switchTab('config-tab', this)">⚙️ Settings</button>
     </div>
 
@@ -149,7 +151,7 @@
             <div id="emi-cards-display"></div>
             <div id="emi-table-display" style="display:none; overflow-x: auto;"></div>
             
-            <!-- NEW MULTI-CHART DISPLAY -->
+            <!-- MULTI-CHART DISPLAY -->
             <div id="emi-chart-display" style="display:none;">
                 <div class="chart-grid">
                     <div class="card">
@@ -185,6 +187,29 @@
                 <button class="btn-action bg-sub" onclick="handleNewSub()">Save Subscription</button>
             </div>
             <div id="sub-display"></div>
+        </div>
+
+        <!-- NEW FULL LEDGER SECTION -->
+        <div id="history-tab" class="tab-content">
+            <div class="hero-row">
+                <div class="hero-bar bg-primary">
+                    <button class="download-btn" title="Download Ledger" onclick="window.print()">⬇️</button>
+                    <small>All-Time Income</small><h1 id="hist-income">£0.00</h1>
+                </div>
+                <div class="hero-bar bg-danger-card"><small>All-Time Spent</small><h1 id="hist-spent">£0.00</h1></div>
+                <div class="hero-bar bg-secondary"><small>Net Balance</small><h1 id="hist-net">£0.00</h1></div>
+            </div>
+            
+            <div class="card" style="display: flex; justify-content: center; align-items: center;">
+                <div style="width: 100%; max-width: 350px;">
+                    <canvas id="historyPieChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>All-Time Transaction Ledger</h3>
+                <div id="full-history-table" style="overflow-x: auto;"></div>
+            </div>
         </div>
 
         <!-- SETTINGS -->
@@ -223,7 +248,8 @@
 
         let currentEmiView = 'cards'; 
         let emiChartInstance = null;  
-        let emiPieChartInstance = null; // Added variable for the pie chart
+        let emiPieChartInstance = null;
+        let histPieChartInstance = null; // New history chart
 
         function fmt(num) { return data.currency + Math.abs(parseFloat(num)).toLocaleString(undefined, {minimumFractionDigits: 2}); }
 
@@ -232,9 +258,18 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             btn.classList.add('active');
+            // If they click the history tab, render the chart so it sizes correctly
+            if(id === 'history-tab') renderHistoryChart();
         }
 
-        function setTheme(t) { document.body.className = t === 'default' ? '' : 'theme-' + t; localStorage.setItem('f_theme', t); if(currentEmiView === 'chart') renderEmiCharts(); }
+        function setTheme(t) { 
+            document.body.className = t === 'default' ? '' : 'theme-' + t; 
+            localStorage.setItem('f_theme', t); 
+            if(currentEmiView === 'chart') renderEmiCharts(); 
+            // Also redraw history chart on theme change
+            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
+        }
+        
         setTheme(localStorage.getItem('f_theme') || 'default');
         document.getElementById('currency-select').value = data.currency;
 
@@ -284,10 +319,12 @@
 
             const curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
 
+            // Total Expense
             let totalExp = 0;
             data.transactions.forEach(t => { if(t.amt < 0) totalExp += t.amt; });
             document.getElementById('total-expense').innerText = fmt(totalExp);
 
+            // EMI Logic
             let eHist = 0, eMonth = 0, eRemaining = 0;
             data.emis.forEach(e => {
                 eHist += e.paid;
@@ -319,6 +356,7 @@
             renderEmiTable();
             if(currentEmiView === 'chart') renderEmiCharts();
 
+            // Sub Logic
             let sHist = 0, sMonth = 0;
             data.transactions.forEach(t => {
                 let d = new Date(t.date);
@@ -339,6 +377,51 @@
                     <button class="del-btn" onclick="removeItem('subs', ${s.id})">✕</button></div></div>`;
             });
 
+            // NEW: FULL HISTORY/LEDGER LOGIC
+            let histIncome = 0, histSpent = 0;
+            let catEmi = 0, catSub = 0, catReg = 0;
+
+            data.transactions.forEach(t => {
+                if(t.amt > 0) {
+                    histIncome += t.amt;
+                } else {
+                    histSpent += Math.abs(t.amt);
+                    if(t.desc.startsWith("Loan:")) catEmi += Math.abs(t.amt);
+                    else if(t.desc.startsWith("Sub:")) catSub += Math.abs(t.amt);
+                    else catReg += Math.abs(t.amt);
+                }
+            });
+
+            document.getElementById('hist-income').innerText = fmt(histIncome);
+            document.getElementById('hist-spent').innerText = fmt(histSpent);
+            // Color Net Balance based on positive or negative
+            const netBal = histIncome - histSpent;
+            document.getElementById('hist-net').innerText = fmt(netBal);
+            
+            // Build the master table
+            let histHtml = `<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr>`;
+            if (data.transactions.length === 0) {
+                histHtml += `<tr><td colspan="4" style="text-align:center;">No transactions found.</td></tr>`;
+            }
+            // Reverse so newest transactions are at the top
+            data.transactions.slice().reverse().forEach(t => {
+                let d = new Date(t.date).toLocaleDateString();
+                let color = t.amt < 0 ? '#e74c3c' : '#2ecc71';
+                histHtml += `<tr>
+                    <td>${d}</td>
+                    <td><strong>${t.desc}</strong></td>
+                    <td style="color:${color}; font-weight:bold;">${fmt(t.amt)}</td>
+                    <td><button class="del-btn" onclick="removeItem('transactions', ${t.id})">Delete</button></td>
+                </tr>`;
+            });
+            histHtml += `</table>`;
+            document.getElementById('full-history-table').innerHTML = histHtml;
+
+            // Save values to globals so Chart can grab them easily
+            window.histCatData = [catReg, catEmi, catSub];
+            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
+
+            // Transactions Mini-List (Dashboard)
             const tList = document.getElementById('trans-list');
             tList.innerHTML = '<h3>Recent Activity</h3>';
             data.transactions.slice().reverse().forEach(t => {
@@ -348,6 +431,71 @@
                         <b style="color:${t.amt < 0 ? '#e74c3c' : '#2ecc71'}">${fmt(t.amt)}</b>
                         <button class="del-btn" style="padding:2px 6px" onclick="removeItem('transactions', ${t.id})">✕</button>
                     </div></div>`;
+            });
+        }
+
+        // Draws the specific EMI Charts
+        function renderEmiCharts() {
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+            const loanNames = data.emis.length > 0 ? data.emis.map(e => e.name) : ['No Data'];
+            const amountPaid = data.emis.length > 0 ? data.emis.map(e => e.paid) : [0];
+            const amountRemaining = data.emis.length > 0 ? data.emis.map(e => Math.max(0, e.total - e.paid)) : [0];
+
+            const barCtx = document.getElementById('emiChart').getContext('2d');
+            if (emiChartInstance) emiChartInstance.destroy(); 
+            emiChartInstance = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: loanNames,
+                    datasets: [
+                        { label: 'Amount Paid', data: amountPaid, backgroundColor: '#2ecc71' },
+                        { label: 'Amount Remaining', data: amountRemaining, backgroundColor: '#e74c3c' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { color: textColor } }, title: { display: true, text: 'Paid vs Remaining Balances', color: textColor } },
+                    scales: { x: { stacked: true, ticks: { color: textColor } }, y: { stacked: true, ticks: { color: textColor } } }
+                }
+            });
+
+            const pieCtx = document.getElementById('emiPieChart').getContext('2d');
+            if (emiPieChartInstance) emiPieChartInstance.destroy();
+            const pieColors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#2ecc71', '#9b59b6', '#e74c3c', '#34495e'];
+            const bgColors = data.emis.length > 0 ? pieColors.slice(0, data.emis.length) : ['#e0e0e0'];
+
+            emiPieChartInstance = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: { labels: loanNames, datasets: [{ label: 'Remaining Debt', data: amountRemaining, backgroundColor: bgColors, borderWidth: 0 }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: 'Total Remaining Debt Distribution', color: textColor } } }
+            });
+        }
+
+        // Draws the new History/Ledger Spending Chart
+        function renderHistoryChart() {
+            if(!window.histCatData) return;
+            const ctx = document.getElementById('historyPieChart').getContext('2d');
+            if (histPieChartInstance) histPieChartInstance.destroy();
+            
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+            
+            histPieChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Regular Expenses', 'EMI Payments', 'Subscriptions'],
+                    datasets: [{
+                        data: window.histCatData,
+                        backgroundColor: ['#f39c12', '#9b59b6', '#3498db'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: textColor } },
+                        title: { display: true, text: 'All-Time Spending Categorization', color: textColor }
+                    }
+                }
             });
         }
 
@@ -371,67 +519,6 @@
             });
             html += `</table>`;
             document.getElementById('emi-table-display').innerHTML = html;
-        }
-
-        // Updated function to draw both Bar and Pie charts
-        function renderEmiCharts() {
-            const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
-            const loanNames = data.emis.length > 0 ? data.emis.map(e => e.name) : ['No Data'];
-            const amountPaid = data.emis.length > 0 ? data.emis.map(e => e.paid) : [0];
-            const amountRemaining = data.emis.length > 0 ? data.emis.map(e => Math.max(0, e.total - e.paid)) : [0];
-
-            // 1. Draw Bar Chart
-            const barCtx = document.getElementById('emiChart').getContext('2d');
-            if (emiChartInstance) emiChartInstance.destroy(); 
-            emiChartInstance = new Chart(barCtx, {
-                type: 'bar',
-                data: {
-                    labels: loanNames,
-                    datasets: [
-                        { label: 'Amount Paid', data: amountPaid, backgroundColor: '#2ecc71' },
-                        { label: 'Amount Remaining', data: amountRemaining, backgroundColor: '#e74c3c' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { 
-                        legend: { labels: { color: textColor } },
-                        title: { display: true, text: 'Paid vs Remaining Balances', color: textColor } 
-                    },
-                    scales: {
-                        x: { stacked: true, ticks: { color: textColor } },
-                        y: { stacked: true, ticks: { color: textColor } }
-                    }
-                }
-            });
-
-            // 2. Draw Pie/Doughnut Chart
-            const pieCtx = document.getElementById('emiPieChart').getContext('2d');
-            if (emiPieChartInstance) emiPieChartInstance.destroy();
-
-            // Colorful palette for individual loans
-            const pieColors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#2ecc71', '#9b59b6', '#e74c3c', '#34495e'];
-            const bgColors = data.emis.length > 0 ? pieColors.slice(0, data.emis.length) : ['#e0e0e0'];
-
-            emiPieChartInstance = new Chart(pieCtx, {
-                type: 'doughnut', // Doughnut styles look cleaner next to bar charts
-                data: {
-                    labels: loanNames,
-                    datasets: [{
-                        label: 'Remaining Debt',
-                        data: amountRemaining,
-                        backgroundColor: bgColors,
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: textColor } },
-                        title: { display: true, text: 'Total Remaining Debt Distribution', color: textColor }
-                    }
-                }
-            });
         }
 
         function payEMI(id) {
