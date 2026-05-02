@@ -47,6 +47,10 @@
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid rgba(128,128,128,0.2); }
         th { background: rgba(128,128,128,0.1); font-weight: bold; }
 
+        /* MULTI-CHART LAYOUT */
+        .chart-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        @media (min-width: 768px) { .chart-grid { grid-template-columns: 1fr 1fr; } } /* Side-by-side on desktop */
+
         /* BUTTONS */
         .download-btn { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 35px; height: 35px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: 0.2s; z-index: 10; }
         .download-btn:hover { background: rgba(255,255,255,0.4); transform: scale(1.1); }
@@ -76,6 +80,7 @@
             .progress-fill { background: #333 !important; }
             body { background: white !important; color: black !important; }
             #emi-cards-display { display: block !important; }
+            #emi-chart-display { display: none !important; }
         }
     </style>
 </head>
@@ -133,18 +138,29 @@
                 <button id="del-emi-btn" style="display:none;" class="btn-action bg-danger-card" onclick="deleteItem('emis', document.getElementById('edit-id').value); resetEMIForm();">Delete Loan</button>
             </div>
 
-            <!-- VIEW TOGGLES ARE HERE -->
+            <!-- VIEW TOGGLES -->
             <div class="view-toggles">
                 <button class="view-btn active" onclick="setEmiView('cards', this)">Cards</button>
                 <button class="view-btn" onclick="setEmiView('table', this)">Table</button>
-                <button class="view-btn" onclick="setEmiView('chart', this)">Chart</button>
+                <button class="view-btn" onclick="setEmiView('chart', this)">Charts</button>
             </div>
 
             <!-- DATA DISPLAYS -->
             <div id="emi-cards-display"></div>
             <div id="emi-table-display" style="display:none; overflow-x: auto;"></div>
-            <div id="emi-chart-display" class="card" style="display:none;">
-                <canvas id="emiChart"></canvas>
+            
+            <!-- NEW MULTI-CHART DISPLAY -->
+            <div id="emi-chart-display" style="display:none;">
+                <div class="chart-grid">
+                    <div class="card">
+                        <canvas id="emiChart"></canvas>
+                    </div>
+                    <div class="card" style="display: flex; justify-content: center; align-items: center;">
+                        <div style="width: 100%; max-width: 300px;">
+                            <canvas id="emiPieChart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -207,6 +223,7 @@
 
         let currentEmiView = 'cards'; 
         let emiChartInstance = null;  
+        let emiPieChartInstance = null; // Added variable for the pie chart
 
         function fmt(num) { return data.currency + Math.abs(parseFloat(num)).toLocaleString(undefined, {minimumFractionDigits: 2}); }
 
@@ -217,7 +234,7 @@
             btn.classList.add('active');
         }
 
-        function setTheme(t) { document.body.className = t === 'default' ? '' : 'theme-' + t; localStorage.setItem('f_theme', t); if(currentEmiView === 'chart') renderEmiChart(); }
+        function setTheme(t) { document.body.className = t === 'default' ? '' : 'theme-' + t; localStorage.setItem('f_theme', t); if(currentEmiView === 'chart') renderEmiCharts(); }
         setTheme(localStorage.getItem('f_theme') || 'default');
         document.getElementById('currency-select').value = data.currency;
 
@@ -230,7 +247,7 @@
             document.getElementById('emi-table-display').style.display = view === 'table' ? 'block' : 'none';
             document.getElementById('emi-chart-display').style.display = view === 'chart' ? 'block' : 'none';
 
-            if(view === 'chart') renderEmiChart();
+            if(view === 'chart') renderEmiCharts();
         }
 
         function handleNewTransaction(descOverride, amtOverride) {
@@ -300,7 +317,7 @@
             });
 
             renderEmiTable();
-            if(currentEmiView === 'chart') renderEmiChart();
+            if(currentEmiView === 'chart') renderEmiCharts();
 
             let sHist = 0, sMonth = 0;
             data.transactions.forEach(t => {
@@ -356,27 +373,62 @@
             document.getElementById('emi-table-display').innerHTML = html;
         }
 
-        function renderEmiChart() {
-            const ctx = document.getElementById('emiChart').getContext('2d');
-            if (emiChartInstance) emiChartInstance.destroy(); 
-
+        // Updated function to draw both Bar and Pie charts
+        function renderEmiCharts() {
             const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
+            const loanNames = data.emis.length > 0 ? data.emis.map(e => e.name) : ['No Data'];
+            const amountPaid = data.emis.length > 0 ? data.emis.map(e => e.paid) : [0];
+            const amountRemaining = data.emis.length > 0 ? data.emis.map(e => Math.max(0, e.total - e.paid)) : [0];
 
-            emiChartInstance = new Chart(ctx, {
+            // 1. Draw Bar Chart
+            const barCtx = document.getElementById('emiChart').getContext('2d');
+            if (emiChartInstance) emiChartInstance.destroy(); 
+            emiChartInstance = new Chart(barCtx, {
                 type: 'bar',
                 data: {
-                    labels: data.emis.length > 0 ? data.emis.map(e => e.name) : ['No Data'],
+                    labels: loanNames,
                     datasets: [
-                        { label: 'Amount Paid', data: data.emis.length > 0 ? data.emis.map(e => e.paid) : [0], backgroundColor: '#2ecc71' },
-                        { label: 'Amount Remaining', data: data.emis.length > 0 ? data.emis.map(e => e.total - e.paid) : [0], backgroundColor: '#e74c3c' }
+                        { label: 'Amount Paid', data: amountPaid, backgroundColor: '#2ecc71' },
+                        { label: 'Amount Remaining', data: amountRemaining, backgroundColor: '#e74c3c' }
                     ]
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { labels: { color: textColor } } },
+                    plugins: { 
+                        legend: { labels: { color: textColor } },
+                        title: { display: true, text: 'Paid vs Remaining Balances', color: textColor } 
+                    },
                     scales: {
                         x: { stacked: true, ticks: { color: textColor } },
                         y: { stacked: true, ticks: { color: textColor } }
+                    }
+                }
+            });
+
+            // 2. Draw Pie/Doughnut Chart
+            const pieCtx = document.getElementById('emiPieChart').getContext('2d');
+            if (emiPieChartInstance) emiPieChartInstance.destroy();
+
+            // Colorful palette for individual loans
+            const pieColors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#2ecc71', '#9b59b6', '#e74c3c', '#34495e'];
+            const bgColors = data.emis.length > 0 ? pieColors.slice(0, data.emis.length) : ['#e0e0e0'];
+
+            emiPieChartInstance = new Chart(pieCtx, {
+                type: 'doughnut', // Doughnut styles look cleaner next to bar charts
+                data: {
+                    labels: loanNames,
+                    datasets: [{
+                        label: 'Remaining Debt',
+                        data: amountRemaining,
+                        backgroundColor: bgColors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: textColor } },
+                        title: { display: true, text: 'Total Remaining Debt Distribution', color: textColor }
                     }
                 }
             });
