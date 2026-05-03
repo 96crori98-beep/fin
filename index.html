@@ -37,6 +37,11 @@
         .hero-bar { color: white; padding: 20px; border-radius: 15px; text-align: center; position: relative; }
         .hero-bar h1 { margin: 5px 0 0 0; font-size: 1.8rem; }
 
+        /* FILE DROP ZONE STYLES */
+        .drop-zone { border: 2px dashed var(--secondary); background: transparent; transition: all 0.3s ease; cursor: pointer; text-align: center; padding: 30px; border-radius: var(--border-radius); }
+        .drop-zone:hover { background: rgba(52, 152, 219, 0.05); }
+        .drop-zone.drag-over { background: rgba(52, 152, 219, 0.15); border-color: var(--primary); transform: scale(1.02); }
+
         /* VIEW TOGGLES & TABLES */
         .view-toggles { display: flex; gap: 10px; margin-bottom: 15px; }
         .view-btn { flex: 1; padding: 10px; border: 2px solid var(--accent); background: transparent; color: var(--text-color); border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
@@ -71,7 +76,7 @@
         .bg-secondary { background: var(--secondary); }
 
         @media print {
-            .sidebar, .btn-action, .download-btn, .del-btn, .edit-link, input, select, .theme-grid, h3, label, .view-toggles { display: none !important; }
+            .sidebar, .btn-action, .download-btn, .del-btn, .edit-link, input, select, .theme-grid, h3, label, .view-toggles, .drop-zone { display: none !important; }
             .main-content { padding: 0; background: white !important; }
             .card { box-shadow: none !important; border: 1px solid #eee !important; background: white !important; color: black !important; }
             .hero-bar, .bg-danger-card { color: black !important; border: 2px solid #333 !important; background: transparent !important; }
@@ -104,6 +109,14 @@
                 <h1 id="total-expense">£0.00</h1>
             </div>
             
+            <!-- SMART FILE IMPORT -->
+            <div class="card drop-zone" id="csv-drop-zone">
+                <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                <h3 style="margin-top: 0; color: var(--secondary);">📥 Smart CSV Import</h3>
+                <p>Drag and drop your Bank Statement here, or click to browse.</p>
+                <small style="opacity: 0.7;">Format must be: <strong>Date, Description, Amount</strong>. <br>The AI Engine will automatically tag Loans and Subscriptions.</small>
+            </div>
+
             <div class="card">
                 <h3>Quick Post</h3>
                 <div class="form-grid">
@@ -113,7 +126,7 @@
                 <button class="btn-action bg-secondary" onclick="handleNewTransaction()">Add Record</button>
             </div>
 
-            <!-- NEW DASHBOARD CHARTS (Replaced the trans-list) -->
+            <!-- DASHBOARD CHARTS -->
             <div class="chart-grid">
                 <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <div style="width: 100%; max-width: 250px;">
@@ -205,9 +218,16 @@
                 <div class="hero-bar bg-secondary"><small>Net Balance</small><h1 id="hist-net">£0.00</h1></div>
             </div>
             
-            <div class="card" style="display: flex; justify-content: center; align-items: center;">
-                <div style="width: 100%; max-width: 350px;">
-                    <canvas id="historyPieChart"></canvas>
+            <div class="chart-grid" style="margin-bottom: 20px;">
+                <div class="card" style="display: flex; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="histCashFlowChart"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="display: flex; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="histExpenseChart"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -252,13 +272,9 @@
         };
 
         let currentEmiView = 'cards'; 
-        let emiChartInstance = null;  
-        let emiPieChartInstance = null;
-        let histPieChartInstance = null; 
-        
-        // New dashboard chart instances
-        let dashEmiChartInstance = null;
-        let dashSubChartInstance = null;
+        let emiChartInstance = null, emiPieChartInstance = null;
+        let histCashFlowChartInstance = null, histExpenseChartInstance = null; 
+        let dashEmiChartInstance = null, dashSubChartInstance = null;
 
         function fmt(num) { return data.currency + Math.abs(parseFloat(num)).toLocaleString(undefined, {minimumFractionDigits: 2}); }
 
@@ -268,21 +284,88 @@
             document.getElementById(id).classList.add('active');
             btn.classList.add('active');
             
-            // Re-render charts based on active tab to ensure correct canvas sizing
             if(id === 'dashboard-tab') renderDashboardCharts();
-            if(id === 'history-tab') renderHistoryChart();
+            if(id === 'history-tab') renderHistoryCharts();
         }
 
         function setTheme(t) { 
             document.body.className = t === 'default' ? '' : 'theme-' + t; 
             localStorage.setItem('f_theme', t); 
             if(document.getElementById('dashboard-tab').classList.contains('active')) renderDashboardCharts();
-            if(currentEmiView === 'chart') renderEmiCharts(); 
-            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
+            if(currentEmiView === 'chart' && document.getElementById('emi-tab').classList.contains('active')) renderEmiCharts(); 
+            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryCharts();
         }
         
         setTheme(localStorage.getItem('f_theme') || 'default');
         document.getElementById('currency-select').value = data.currency;
+
+        // SMART CSV IMPORT ENGINE
+        const dropZone = document.getElementById('csv-drop-zone');
+        const fileInput = document.getElementById('csv-file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+                return alert("Error: Please upload a valid CSV file.");
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => processCSV(e.target.result);
+            reader.readAsText(file);
+        }
+
+        function processCSV(text) {
+            const lines = text.split('\n');
+            let addedCount = 0;
+            
+            // Keywords for auto-categorization
+            const subKeywords = ['netflix', 'spotify', 'amazon', 'prime', 'apple', 'gym', 'disney', 'hulu', 'subscription'];
+            const emiKeywords = ['loan', 'mortgage', 'credit', 'klarna', 'finance', 'emi', 'affirm', 'afterpay'];
+
+            for (let i = 0; i < lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                
+                // Simple CSV split (won't handle commas inside quotes perfectly, but works for basic statements)
+                const cols = lines[i].split(',');
+                if (cols.length >= 3) {
+                    let rawDate = cols[0].trim();
+                    let desc = cols[1].trim().replace(/['"]/g, ''); // Remove quotes
+                    let amt = parseFloat(cols[2].trim());
+
+                    if (isNaN(amt)) continue; // Skip headers
+
+                    // AI Categorization Logic
+                    let lowerDesc = desc.toLowerCase();
+                    if (amt < 0) { // Only categorize expenses
+                        let isSub = subKeywords.some(keyword => lowerDesc.includes(keyword));
+                        let isEmi = emiKeywords.some(keyword => lowerDesc.includes(keyword));
+                        
+                        if (isSub && !desc.startsWith("Sub:")) desc = "Sub: " + desc;
+                        else if (isEmi && !desc.startsWith("Loan:")) desc = "Loan: " + desc;
+                    }
+
+                    data.transactions.push({
+                        id: Date.now() + i, // prevent identical IDs
+                        desc: desc,
+                        amt: amt,
+                        date: !isNaN(Date.parse(rawDate)) ? new Date(rawDate).toISOString() : new Date().toISOString()
+                    });
+                    addedCount++;
+                }
+            }
+            alert(`✅ Successfully imported and categorized ${addedCount} transactions!`);
+            refresh();
+            fileInput.value = ''; // Reset input
+        }
 
         function setEmiView(view, btn) {
             currentEmiView = view;
@@ -330,12 +413,11 @@
 
             const curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
 
-            // Total Expense (Dashboard)
+            // Total Expense
             let totalExp = 0;
             data.transactions.forEach(t => { if(t.amt < 0) totalExp += t.amt; });
             document.getElementById('total-expense').innerText = fmt(totalExp);
 
-            // Render new Dashboard Charts
             renderDashboardCharts();
 
             // EMI Logic
@@ -429,44 +511,34 @@
             document.getElementById('full-history-table').innerHTML = histHtml;
 
             window.histCatData = [catReg, catEmi, catSub];
-            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryChart();
+            window.histFlowData = [histIncome, histSpent];
+            
+            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryCharts();
         }
 
-        // NEW: Draw Dashboard Summary Charts
         function renderDashboardCharts() {
             if(!document.getElementById('dashboard-tab').classList.contains('active')) return;
             const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
 
-            // 1. Dashboard EMI Chart (Aggregate)
             let totalEmiPlan = 0, totalEmiPaid = 0;
-            data.emis.forEach(e => {
-                totalEmiPlan += e.total;
-                totalEmiPaid += e.paid;
-            });
+            data.emis.forEach(e => { totalEmiPlan += e.total; totalEmiPaid += e.paid; });
             let totalEmiLeft = Math.max(0, totalEmiPlan - totalEmiPaid);
 
             const ctxEmi = document.getElementById('dashEmiChart').getContext('2d');
             if (dashEmiChartInstance) dashEmiChartInstance.destroy();
+            
+            let emiData = totalEmiPlan > 0 ? [totalEmiPaid, totalEmiLeft] : [1];
+            let emiColors = totalEmiPlan > 0 ? ['#2ecc71', '#e74c3c'] : ['#e0e0e0'];
+            
             dashEmiChartInstance = new Chart(ctxEmi, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Amount Paid', 'Left to Pay'],
-                    datasets: [{
-                        data: totalEmiPlan > 0 ? [totalEmiPaid, totalEmiLeft] : [0, 1], // fallback if empty
-                        backgroundColor: ['#2ecc71', '#e74c3c'],
-                        borderWidth: 0
-                    }]
+                    labels: totalEmiPlan > 0 ? ['Amount Paid', 'Left to Pay'] : ['No Data'],
+                    datasets: [{ data: emiData, backgroundColor: emiColors, borderWidth: 0 }]
                 },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: textColor } },
-                        title: { display: true, text: `All EMI Plans (Total: ${fmt(totalEmiPlan)})`, color: textColor }
-                    }
-                }
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: `All EMI Plans (Total: ${fmt(totalEmiPlan)})`, color: textColor } } }
             });
 
-            // 2. Dashboard Subs Chart (Aggregate Monthly)
             let totalMonthlySubs = 0;
             data.subs.forEach(s => totalMonthlySubs += s.amt);
 
@@ -482,27 +554,20 @@
 
             const ctxSub = document.getElementById('dashSubChart').getContext('2d');
             if (dashSubChartInstance) dashSubChartInstance.destroy();
+            
+            let subData = totalMonthlySubs > 0 ? [subsPaidThisMonth, subsLeftThisMonth] : [1];
+            let subColors = totalMonthlySubs > 0 ? ['#3498db', '#f39c12'] : ['#e0e0e0'];
+            
             dashSubChartInstance = new Chart(ctxSub, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Paid This Month', 'Left This Month'],
-                    datasets: [{
-                        data: totalMonthlySubs > 0 ? [subsPaidThisMonth, subsLeftThisMonth] : [0, 1],
-                        backgroundColor: ['#3498db', '#f39c12'],
-                        borderWidth: 0
-                    }]
+                    labels: totalMonthlySubs > 0 ? ['Paid This Month', 'Left This Month'] : ['No Data'],
+                    datasets: [{ data: subData, backgroundColor: subColors, borderWidth: 0 }]
                 },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: textColor } },
-                        title: { display: true, text: `Monthly Subs (Total: ${fmt(totalMonthlySubs)})`, color: textColor }
-                    }
-                }
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: `Monthly Subs (Total: ${fmt(totalMonthlySubs)})`, color: textColor } } }
             });
         }
 
-        // Draws the specific EMI Charts
         function renderEmiCharts() {
             const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
             const loanNames = data.emis.length > 0 ? data.emis.map(e => e.name) : ['No Data'];
@@ -513,18 +578,8 @@
             if (emiChartInstance) emiChartInstance.destroy(); 
             emiChartInstance = new Chart(barCtx, {
                 type: 'bar',
-                data: {
-                    labels: loanNames,
-                    datasets: [
-                        { label: 'Amount Paid', data: amountPaid, backgroundColor: '#2ecc71' },
-                        { label: 'Amount Remaining', data: amountRemaining, backgroundColor: '#e74c3c' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { labels: { color: textColor } }, title: { display: true, text: 'Paid vs Remaining Balances', color: textColor } },
-                    scales: { x: { stacked: true, ticks: { color: textColor } }, y: { stacked: true, ticks: { color: textColor } } }
-                }
+                data: { labels: loanNames, datasets: [{ label: 'Amount Paid', data: amountPaid, backgroundColor: '#2ecc71' }, { label: 'Amount Remaining', data: amountRemaining, backgroundColor: '#e74c3c' }] },
+                options: { responsive: true, plugins: { legend: { labels: { color: textColor } }, title: { display: true, text: 'Paid vs Remaining Balances', color: textColor } }, scales: { x: { stacked: true, ticks: { color: textColor } }, y: { stacked: true, ticks: { color: textColor } } } }
             });
 
             const pieCtx = document.getElementById('emiPieChart').getContext('2d');
@@ -539,94 +594,47 @@
             });
         }
 
-        // Draws the History/Ledger Spending Chart
-        function renderHistoryChart() {
-            if(!window.histCatData) return;
-            const ctx = document.getElementById('historyPieChart').getContext('2d');
-            if (histPieChartInstance) histPieChartInstance.destroy();
-            
+        function renderHistoryCharts() {
+            if(!window.histCatData || !window.histFlowData) return;
             const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
             
-            histPieChartInstance = new Chart(ctx, {
+            const ctxFlow = document.getElementById('histCashFlowChart').getContext('2d');
+            if (histCashFlowChartInstance) histCashFlowChartInstance.destroy();
+            let flowData = window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? [1] : window.histFlowData;
+            let flowColors = window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? ['#e0e0e0'] : ['#2ecc71', '#e74c3c'];
+            histCashFlowChartInstance = new Chart(ctxFlow, {
                 type: 'pie',
-                data: {
-                    labels: ['Regular Expenses', 'EMI Payments', 'Subscriptions'],
-                    datasets: [{
-                        data: window.histCatData,
-                        backgroundColor: ['#f39c12', '#9b59b6', '#3498db'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: textColor } },
-                        title: { display: true, text: 'All-Time Spending Categorization', color: textColor }
-                    }
-                }
+                data: { labels: window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? ['No Data'] : ['All-Time Income', 'All-Time Spent'], datasets: [{ data: flowData, backgroundColor: flowColors, borderWidth: 0 }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: 'Income vs Spending', color: textColor } } }
+            });
+
+            const ctxExp = document.getElementById('histExpenseChart').getContext('2d');
+            if (histExpenseChartInstance) histExpenseChartInstance.destroy();
+            let catIsEmpty = window.histCatData.every(x => x === 0);
+            let catData = catIsEmpty ? [1] : window.histCatData;
+            let catColors = catIsEmpty ? ['#e0e0e0'] : ['#f39c12', '#9b59b6', '#3498db'];
+            histExpenseChartInstance = new Chart(ctxExp, {
+                type: 'pie',
+                data: { labels: catIsEmpty ? ['No Data'] : ['Regular Expenses', 'EMI Payments', 'Subscriptions'], datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: 'Spending Breakdown', color: textColor } } }
             });
         }
 
         function renderEmiTable() {
             let html = `<table><tr><th>Loan Name</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Monthly</th><th>Actions</th></tr>`;
-            if (data.emis.length === 0) {
-                html += `<tr><td colspan="6" style="text-align:center;">No loans added yet.</td></tr>`;
-            }
+            if (data.emis.length === 0) html += `<tr><td colspan="6" style="text-align:center;">No loans added yet.</td></tr>`;
             data.emis.forEach(e => {
-                html += `<tr>
-                    <td><strong>${e.name}</strong></td>
-                    <td>${fmt(e.total)}</td>
-                    <td style="color:#2ecc71">${fmt(e.paid)}</td>
-                    <td style="color:#e74c3c">${fmt(e.total - e.paid)}</td>
-                    <td>${fmt(e.monthly)}</td>
-                    <td>
-                        <button class="paid-btn" onclick="payEMI(${e.id})" style="margin-right:5px">Pay</button>
-                        <button class="paid-btn" onclick="editEMI(${e.id})" style="background:#3498db">Edit</button>
-                    </td>
-                </tr>`;
+                html += `<tr><td><strong>${e.name}</strong></td><td>${fmt(e.total)}</td><td style="color:#2ecc71">${fmt(e.paid)}</td><td style="color:#e74c3c">${fmt(e.total - e.paid)}</td><td>${fmt(e.monthly)}</td><td><button class="paid-btn" onclick="payEMI(${e.id})" style="margin-right:5px">Pay</button><button class="paid-btn" onclick="editEMI(${e.id})" style="background:#3498db">Edit</button></td></tr>`;
             });
             html += `</table>`;
             document.getElementById('emi-table-display').innerHTML = html;
         }
 
-        function payEMI(id) {
-            const e = data.emis.find(x => x.id == id);
-            const amt = Math.min(e.monthly, e.total - e.paid);
-            if(amt <= 0) return alert("Loan fully paid!");
-            e.paid += amt;
-            handleNewTransaction(`Loan: ${e.name}`, -amt);
-        }
-
-        function paySub(id) {
-            const s = data.subs.find(x => x.id == id);
-            handleNewTransaction(`Sub: ${s.name}`, -s.amt);
-        }
-
-        function editEMI(id) {
-            const e = data.emis.find(x => x.id == id);
-            document.getElementById('e-name').value = e.name;
-            document.getElementById('e-total').value = e.total;
-            document.getElementById('e-paid').value = e.paid;
-            document.getElementById('e-monthly').value = e.monthly;
-            document.getElementById('edit-id').value = e.id;
-            document.getElementById('emi-form-title').innerText = "Edit Loan";
-            document.getElementById('del-emi-btn').style.display = "block";
-            window.scrollTo(0,0);
-        }
-
-        function resetEMIForm() {
-            ['e-name','e-total','e-paid','e-monthly','edit-id'].forEach(i => document.getElementById(i).value = '');
-            document.getElementById('del-emi-btn').style.display = "none";
-            document.getElementById('emi-form-title').innerText = "EMI Management";
-        }
-
-        function removeItem(type, id) {
-            if(confirm("Confirm Delete?")) {
-                data[type] = data[type].filter(x => x.id != id);
-                refresh();
-            }
-        }
-
+        function payEMI(id) { const e = data.emis.find(x => x.id == id); const amt = Math.min(e.monthly, e.total - e.paid); if(amt <= 0) return alert("Loan fully paid!"); e.paid += amt; handleNewTransaction(`Loan: ${e.name}`, -amt); }
+        function paySub(id) { const s = data.subs.find(x => x.id == id); handleNewTransaction(`Sub: ${s.name}`, -s.amt); }
+        function editEMI(id) { const e = data.emis.find(x => x.id == id); document.getElementById('e-name').value = e.name; document.getElementById('e-total').value = e.total; document.getElementById('e-paid').value = e.paid; document.getElementById('e-monthly').value = e.monthly; document.getElementById('edit-id').value = e.id; document.getElementById('emi-form-title').innerText = "Edit Loan"; document.getElementById('del-emi-btn').style.display = "block"; window.scrollTo(0,0); }
+        function resetEMIForm() { ['e-name','e-total','e-paid','e-monthly','edit-id'].forEach(i => document.getElementById(i).value = ''); document.getElementById('del-emi-btn').style.display = "none"; document.getElementById('emi-form-title').innerText = "EMI Management"; }
+        function removeItem(type, id) { if(confirm("Confirm Delete?")) { data[type] = data[type].filter(x => x.id != id); refresh(); } }
         function updateCurrency(v) { data.currency = v; localStorage.setItem('f_cur', v); refresh(); }
 
         refresh();
