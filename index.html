@@ -57,7 +57,10 @@
         .download-btn:hover { background: rgba(255,255,255,0.4); transform: scale(1.1); }
 
         .progress-container { background: rgba(0,0,0,0.1); height: 12px; border-radius: 6px; overflow: hidden; margin: 15px 0; border: 1px solid rgba(0,0,0,0.05); }
-        .progress-fill { background: linear-gradient(90deg, var(--primary), var(--secondary)); height: 100%; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); width: 0%; }
+        .progress-fill { height: 100%; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s ease; width: 0%; }
+        
+        /* Specific gradient for EMI cards */
+        .emi-progress { background: linear-gradient(90deg, var(--primary), var(--secondary)); }
 
         .paid-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.75rem; }
         .del-btn { background: #ff4757; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; }
@@ -70,6 +73,7 @@
         .bg-accent { background: var(--accent); }
         .bg-sub { background: var(--sub-color); }
         .bg-secondary { background: var(--secondary); }
+        .bg-primary { background: var(--primary); }
 
         @media print {
             .sidebar, .btn-action, .download-btn, .del-btn, .edit-link, input, select, .theme-grid, h3, label, .view-toggles { display: none !important; }
@@ -92,7 +96,6 @@
         <button class="nav-btn active" onclick="switchTab('dashboard-tab', this)">🏠 Dashboard</button>
         <button class="nav-btn" onclick="switchTab('emi-tab', this)">📊 EMI Tracker</button>
         <button class="nav-btn" onclick="switchTab('sub-tab', this)">🔔 Subscriptions</button>
-        <button class="nav-btn" onclick="switchTab('history-tab', this)">📜 Full Ledger</button>
         <button class="nav-btn" onclick="switchTab('config-tab', this)">⚙️ Settings</button>
     </div>
 
@@ -101,10 +104,22 @@
         <div id="dashboard-tab" class="tab-content active">
             <div class="card bg-danger-card" style="color:white; text-align:center; padding: 30px;">
                 <button class="download-btn" title="Download Dashboard" onclick="window.print()">⬇️</button>
-                <small>Total Expense</small>
+                <small>Total Expense (All Time)</small>
                 <h1 id="total-expense">£0.00</h1>
             </div>
             
+            <!-- SMART MONTHLY BUDGET BAR -->
+            <div class="card">
+                <h3 style="margin-top: 0;">Monthly Budget Tracker</h3>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 5px; font-weight: bold;">
+                    <span id="budget-spent-text">£0.00 Spent</span>
+                    <span id="budget-limit-text">Limit: £2000.00</span>
+                </div>
+                <div class="progress-container">
+                    <div id="budget-progress-fill" class="progress-fill" style="width: 0%; background-color: #2ecc71;"></div>
+                </div>
+            </div>
+
             <div class="card">
                 <h3>Quick Post</h3>
                 <div class="form-grid">
@@ -131,12 +146,14 @@
 
         <!-- EMI SECTION -->
         <div id="emi-tab" class="tab-content">
-            <div class="hero-row">
+            <!-- UPDATED TO 4 COLUMNS -->
+            <div class="hero-row" style="grid-template-columns: repeat(4, 1fr);">
                 <div class="hero-bar bg-accent">
                     <button class="download-btn" title="Download EMI List" onclick="window.print()">⬇️</button>
                     <small>Lifetime Paid</small><h1 id="emi-history-total">£0.00</h1>
                 </div>
                 <div class="hero-bar bg-secondary"><small>Paid This Month</small><h1 id="emi-month-total">£0.00</h1></div>
+                <div class="hero-bar bg-primary"><small>Total Monthly EMI</small><h1 id="emi-monthly-total">£0.00</h1></div>
                 <div class="hero-bar bg-danger-card"><small>Left To Pay</small><h1 id="emi-remaining-total">£0.00</h1></div>
             </div>
             
@@ -195,43 +212,13 @@
             <div id="sub-display"></div>
         </div>
 
-        <!-- FULL LEDGER SECTION -->
-        <div id="history-tab" class="tab-content">
-            <div class="hero-row">
-                <div class="hero-bar bg-primary">
-                    <button class="download-btn" title="Download Ledger" onclick="window.print()">⬇️</button>
-                    <small>All-Time Income</small><h1 id="hist-income">£0.00</h1>
-                </div>
-                <div class="hero-bar bg-danger-card"><small>All-Time Spent</small><h1 id="hist-spent">£0.00</h1></div>
-                <div class="hero-bar bg-secondary"><small>Net Balance</small><h1 id="hist-net">£0.00</h1></div>
-            </div>
-            
-            <div class="chart-grid" style="margin-bottom: 20px;">
-                <div class="card" style="display: flex; justify-content: center; align-items: center;">
-                    <div style="width: 100%; max-width: 250px;">
-                        <canvas id="histCashFlowChart"></canvas>
-                    </div>
-                </div>
-                <div class="card" style="display: flex; justify-content: center; align-items: center;">
-                    <div style="width: 100%; max-width: 250px;">
-                        <canvas id="histExpenseChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="margin: 0;">All-Time Transaction Ledger</h3>
-                    <button class="btn-action bg-danger-card" style="width: auto; margin: 0; padding: 8px 15px; font-size: 0.85rem;" onclick="deleteAllTransactions()">🗑️ Delete All</button>
-                </div>
-                <div id="full-history-table" style="overflow-x: auto;"></div>
-            </div>
-        </div>
-
         <!-- SETTINGS -->
         <div id="config-tab" class="tab-content">
             <div class="card">
-                <h3>Configuration</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin:0">Configuration</h3>
+                    <button class="btn-action bg-danger-card" style="width: auto; margin: 0; padding: 8px 15px; font-size: 0.85rem;" onclick="deleteAllTransactions()">⚠️ Wipe All Data</button>
+                </div>
                 <div class="form-grid" style="margin-bottom:20px">
                     <div><label>Active Currency</label>
                         <select id="currency-select" onchange="updateCurrency(this.value)">
@@ -240,6 +227,9 @@
                             <option value="€">EUR (€)</option>
                             <option value="₹">INR (₹)</option>
                         </select>
+                    </div>
+                    <div><label>Monthly Budget Limit</label>
+                        <input type="number" id="budget-input" onchange="updateBudget(this.value)" placeholder="e.g., 2000">
                     </div>
                 </div>
                 <p>Choose Theme:</p>
@@ -259,12 +249,12 @@
             transactions: JSON.parse(localStorage.getItem('f_trans')) || [],
             emis: JSON.parse(localStorage.getItem('f_emis')) || [],
             subs: JSON.parse(localStorage.getItem('f_subs')) || [],
-            currency: localStorage.getItem('f_cur') || '£'
+            currency: localStorage.getItem('f_cur') || '£',
+            budget: parseFloat(localStorage.getItem('f_budget')) || 2000
         };
 
         let currentEmiView = 'cards'; 
         let emiChartInstance = null, emiPieChartInstance = null;
-        let histCashFlowChartInstance = null, histExpenseChartInstance = null; 
         let dashEmiChartInstance = null, dashSubChartInstance = null;
 
         function fmt(num) { return data.currency + Math.abs(parseFloat(num)).toLocaleString(undefined, {minimumFractionDigits: 2}); }
@@ -276,7 +266,6 @@
             btn.classList.add('active');
             
             if(id === 'dashboard-tab') renderDashboardCharts();
-            if(id === 'history-tab') renderHistoryCharts();
         }
 
         function setTheme(t) { 
@@ -284,11 +273,17 @@
             localStorage.setItem('f_theme', t); 
             if(document.getElementById('dashboard-tab').classList.contains('active')) renderDashboardCharts();
             if(currentEmiView === 'chart' && document.getElementById('emi-tab').classList.contains('active')) renderEmiCharts(); 
-            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryCharts();
         }
         
         setTheme(localStorage.getItem('f_theme') || 'default');
         document.getElementById('currency-select').value = data.currency;
+        document.getElementById('budget-input').value = data.budget;
+
+        function updateBudget(v) { 
+            data.budget = parseFloat(v) || 0; 
+            localStorage.setItem('f_budget', data.budget); 
+            refresh(); 
+        }
 
         function setEmiView(view, btn) {
             currentEmiView = view;
@@ -336,18 +331,49 @@
 
             const curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
 
-            // Total Expense
+            // Total Expense & Monthly Expense (For Budget)
             let totalExp = 0;
-            data.transactions.forEach(t => { if(t.amt < 0) totalExp += t.amt; });
+            let monthExp = 0;
+            data.transactions.forEach(t => { 
+                if(t.amt < 0) {
+                    totalExp += t.amt; 
+                    let d = new Date(t.date);
+                    if(d.getMonth() === curMonth && d.getFullYear() === curYear) {
+                        monthExp += Math.abs(t.amt);
+                    }
+                }
+            });
             document.getElementById('total-expense').innerText = fmt(totalExp);
+
+            // Update Smart Monthly Budget Bar
+            document.getElementById('budget-spent-text').innerText = `${fmt(monthExp)} Spent`;
+            document.getElementById('budget-limit-text').innerText = `Limit: ${fmt(data.budget)}`;
+            
+            let budgetPct = data.budget > 0 ? (monthExp / data.budget) * 100 : 0;
+            let pFill = document.getElementById('budget-progress-fill');
+            pFill.style.width = Math.min(budgetPct, 100) + '%';
+            
+            // Color Logic for Budget Bar
+            if (budgetPct >= 100) {
+                pFill.style.backgroundColor = '#e74c3c'; // Red (Exceeded)
+            } else if (budgetPct >= 75) {
+                pFill.style.backgroundColor = '#f39c12'; // Yellow (Warning)
+            } else {
+                pFill.style.backgroundColor = '#2ecc71'; // Green (Good)
+            }
 
             renderDashboardCharts();
 
             // EMI Logic
-            let eHist = 0, eMonth = 0, eRemaining = 0;
+            let eHist = 0, eMonth = 0, eRemaining = 0, eMonthlyTotal = 0;
             data.emis.forEach(e => {
                 eHist += e.paid;
-                eRemaining += (e.total - e.paid);
+                eRemaining += Math.max(0, e.total - e.paid);
+                
+                // Only count the monthly payment if the loan is not fully paid off
+                if(e.total > e.paid) {
+                    eMonthlyTotal += e.monthly;
+                }
             });
             
             data.transactions.forEach(t => {
@@ -358,6 +384,7 @@
             document.getElementById('emi-history-total').innerText = fmt(eHist);
             document.getElementById('emi-month-total').innerText = fmt(eMonth);
             document.getElementById('emi-remaining-total').innerText = fmt(eRemaining);
+            document.getElementById('emi-monthly-total').innerText = fmt(eMonthlyTotal);
 
             const eDisp = document.getElementById('emi-cards-display'); eDisp.innerHTML = '';
             data.emis.forEach(e => {
@@ -365,7 +392,7 @@
                 eDisp.innerHTML += `<div class="card">
                     <button class="edit-link" onclick="editEMI(${e.id})">EDIT</button>
                     <strong>${e.name} (${progress}%)</strong>
-                    <div class="progress-container"><div class="progress-fill" style="width:${progress}%"></div></div>
+                    <div class="progress-container"><div class="progress-fill emi-progress" style="width:${progress}%"></div></div>
                     <div style="display:flex; justify-content:space-between; align-items:center">
                         <small>Remaining: ${fmt(e.total - e.paid)}</small>
                         <button class="paid-btn" onclick="payEMI(${e.id})">PAID</button>
@@ -395,48 +422,6 @@
                     <button class="paid-btn" onclick="paySub(${s.id})">PAID</button>
                     <button class="del-btn" onclick="removeItem('subs', ${s.id})">✕</button></div></div>`;
             });
-
-            // FULL HISTORY/LEDGER LOGIC
-            let histIncome = 0, histSpent = 0;
-            let catEmi = 0, catSub = 0, catReg = 0;
-
-            data.transactions.forEach(t => {
-                if(t.amt > 0) {
-                    histIncome += t.amt;
-                } else {
-                    histSpent += Math.abs(t.amt);
-                    if(t.desc.startsWith("Loan:")) catEmi += Math.abs(t.amt);
-                    else if(t.desc.startsWith("Sub:")) catSub += Math.abs(t.amt);
-                    else catReg += Math.abs(t.amt);
-                }
-            });
-
-            document.getElementById('hist-income').innerText = fmt(histIncome);
-            document.getElementById('hist-spent').innerText = fmt(histSpent);
-            const netBal = histIncome - histSpent;
-            document.getElementById('hist-net').innerText = fmt(netBal);
-            
-            let histHtml = `<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr>`;
-            if (data.transactions.length === 0) {
-                histHtml += `<tr><td colspan="4" style="text-align:center;">No transactions found.</td></tr>`;
-            }
-            data.transactions.slice().reverse().forEach(t => {
-                let d = new Date(t.date).toLocaleDateString();
-                let color = t.amt < 0 ? '#e74c3c' : '#2ecc71';
-                histHtml += `<tr>
-                    <td>${d}</td>
-                    <td><strong>${t.desc}</strong></td>
-                    <td style="color:${color}; font-weight:bold;">${fmt(t.amt)}</td>
-                    <td><button class="del-btn" onclick="removeItem('transactions', ${t.id})">Delete</button></td>
-                </tr>`;
-            });
-            histHtml += `</table>`;
-            document.getElementById('full-history-table').innerHTML = histHtml;
-
-            window.histCatData = [catReg, catEmi, catSub];
-            window.histFlowData = [histIncome, histSpent];
-            
-            if(document.getElementById('history-tab').classList.contains('active')) renderHistoryCharts();
         }
 
         function renderDashboardCharts() {
@@ -517,32 +502,6 @@
             });
         }
 
-        function renderHistoryCharts() {
-            if(!window.histCatData || !window.histFlowData) return;
-            const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim();
-            
-            const ctxFlow = document.getElementById('histCashFlowChart').getContext('2d');
-            if (histCashFlowChartInstance) histCashFlowChartInstance.destroy();
-            let flowData = window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? [1] : window.histFlowData;
-            let flowColors = window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? ['#e0e0e0'] : ['#2ecc71', '#e74c3c'];
-            histCashFlowChartInstance = new Chart(ctxFlow, {
-                type: 'pie',
-                data: { labels: window.histFlowData[0] === 0 && window.histFlowData[1] === 0 ? ['No Data'] : ['All-Time Income', 'All-Time Spent'], datasets: [{ data: flowData, backgroundColor: flowColors, borderWidth: 0 }] },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: 'Income vs Spending', color: textColor } } }
-            });
-
-            const ctxExp = document.getElementById('histExpenseChart').getContext('2d');
-            if (histExpenseChartInstance) histExpenseChartInstance.destroy();
-            let catIsEmpty = window.histCatData.every(x => x === 0);
-            let catData = catIsEmpty ? [1] : window.histCatData;
-            let catColors = catIsEmpty ? ['#e0e0e0'] : ['#f39c12', '#9b59b6', '#3498db'];
-            histExpenseChartInstance = new Chart(ctxExp, {
-                type: 'pie',
-                data: { labels: catIsEmpty ? ['No Data'] : ['Regular Expenses', 'EMI Payments', 'Subscriptions'], datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: textColor } }, title: { display: true, text: 'Spending Breakdown', color: textColor } } }
-            });
-        }
-
         function renderEmiTable() {
             let html = `<table><tr><th>Loan Name</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Monthly</th><th>Actions</th></tr>`;
             if (data.emis.length === 0) html += `<tr><td colspan="6" style="text-align:center;">No loans added yet.</td></tr>`;
@@ -554,8 +513,10 @@
         }
 
         function deleteAllTransactions() {
-            if(confirm("⚠️ WARNING: Are you sure you want to delete ALL transactions from your ledger? This cannot be undone!")) {
+            if(confirm("⚠️ WARNING: Are you sure you want to completely WIPE all your financial data? This cannot be undone!")) {
                 data.transactions = [];
+                data.emis = [];
+                data.subs = [];
                 refresh();
             }
         }
