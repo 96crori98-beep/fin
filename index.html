@@ -31,16 +31,12 @@
 
         input, select { width: 100%; padding: 10px; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; background: var(--card-bg); color: var(--text-color); box-sizing: border-box; }
 
-        .btn-action { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; margin-top: 10px; }
+        .btn-action { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; margin-top: 10px; transition: 0.2s; }
+        .btn-action:hover { opacity: 0.9; transform: translateY(-1px); }
 
         .hero-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px; }
         .hero-bar { color: white; padding: 20px; border-radius: 15px; text-align: center; position: relative; }
         .hero-bar h1 { margin: 5px 0 0 0; font-size: 1.8rem; }
-
-        /* FILE DROP ZONE STYLES */
-        .drop-zone { border: 2px dashed var(--secondary); background: transparent; transition: all 0.3s ease; cursor: pointer; text-align: center; padding: 30px; border-radius: var(--border-radius); }
-        .drop-zone:hover { background: rgba(52, 152, 219, 0.05); }
-        .drop-zone.drag-over { background: rgba(52, 152, 219, 0.15); border-color: var(--primary); transform: scale(1.02); }
 
         /* VIEW TOGGLES & TABLES */
         .view-toggles { display: flex; gap: 10px; margin-bottom: 15px; }
@@ -76,7 +72,7 @@
         .bg-secondary { background: var(--secondary); }
 
         @media print {
-            .sidebar, .btn-action, .download-btn, .del-btn, .edit-link, input, select, .theme-grid, h3, label, .view-toggles, .drop-zone { display: none !important; }
+            .sidebar, .btn-action, .download-btn, .del-btn, .edit-link, input, select, .theme-grid, h3, label, .view-toggles { display: none !important; }
             .main-content { padding: 0; background: white !important; }
             .card { box-shadow: none !important; border: 1px solid #eee !important; background: white !important; color: black !important; }
             .hero-bar, .bg-danger-card { color: black !important; border: 2px solid #333 !important; background: transparent !important; }
@@ -109,14 +105,6 @@
                 <h1 id="total-expense">£0.00</h1>
             </div>
             
-            <!-- SMART FILE IMPORT -->
-            <div class="card drop-zone" id="csv-drop-zone">
-                <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
-                <h3 style="margin-top: 0; color: var(--secondary);">📥 Smart CSV Import</h3>
-                <p>Drag and drop your Bank Statement here, or click to browse.</p>
-                <small style="opacity: 0.7;">Format must be: <strong>Date, Description, Amount</strong>. <br>The AI Engine will automatically tag Loans and Subscriptions.</small>
-            </div>
-
             <div class="card">
                 <h3>Quick Post</h3>
                 <div class="form-grid">
@@ -232,7 +220,10 @@
             </div>
 
             <div class="card">
-                <h3>All-Time Transaction Ledger</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">All-Time Transaction Ledger</h3>
+                    <button class="btn-action bg-danger-card" style="width: auto; margin: 0; padding: 8px 15px; font-size: 0.85rem;" onclick="deleteAllTransactions()">🗑️ Delete All</button>
+                </div>
                 <div id="full-history-table" style="overflow-x: auto;"></div>
             </div>
         </div>
@@ -298,74 +289,6 @@
         
         setTheme(localStorage.getItem('f_theme') || 'default');
         document.getElementById('currency-select').value = data.currency;
-
-        // SMART CSV IMPORT ENGINE
-        const dropZone = document.getElementById('csv-drop-zone');
-        const fileInput = document.getElementById('csv-file-input');
-
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault(); dropZone.classList.remove('drag-over');
-            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-        });
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) handleFile(e.target.files[0]);
-        });
-
-        function handleFile(file) {
-            if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-                return alert("Error: Please upload a valid CSV file.");
-            }
-            const reader = new FileReader();
-            reader.onload = (e) => processCSV(e.target.result);
-            reader.readAsText(file);
-        }
-
-        function processCSV(text) {
-            const lines = text.split('\n');
-            let addedCount = 0;
-            
-            // Keywords for auto-categorization
-            const subKeywords = ['netflix', 'spotify', 'amazon', 'prime', 'apple', 'gym', 'disney', 'hulu', 'subscription'];
-            const emiKeywords = ['loan', 'mortgage', 'credit', 'klarna', 'finance', 'emi', 'affirm', 'afterpay'];
-
-            for (let i = 0; i < lines.length; i++) {
-                if(!lines[i].trim()) continue;
-                
-                // Simple CSV split (won't handle commas inside quotes perfectly, but works for basic statements)
-                const cols = lines[i].split(',');
-                if (cols.length >= 3) {
-                    let rawDate = cols[0].trim();
-                    let desc = cols[1].trim().replace(/['"]/g, ''); // Remove quotes
-                    let amt = parseFloat(cols[2].trim());
-
-                    if (isNaN(amt)) continue; // Skip headers
-
-                    // AI Categorization Logic
-                    let lowerDesc = desc.toLowerCase();
-                    if (amt < 0) { // Only categorize expenses
-                        let isSub = subKeywords.some(keyword => lowerDesc.includes(keyword));
-                        let isEmi = emiKeywords.some(keyword => lowerDesc.includes(keyword));
-                        
-                        if (isSub && !desc.startsWith("Sub:")) desc = "Sub: " + desc;
-                        else if (isEmi && !desc.startsWith("Loan:")) desc = "Loan: " + desc;
-                    }
-
-                    data.transactions.push({
-                        id: Date.now() + i, // prevent identical IDs
-                        desc: desc,
-                        amt: amt,
-                        date: !isNaN(Date.parse(rawDate)) ? new Date(rawDate).toISOString() : new Date().toISOString()
-                    });
-                    addedCount++;
-                }
-            }
-            alert(`✅ Successfully imported and categorized ${addedCount} transactions!`);
-            refresh();
-            fileInput.value = ''; // Reset input
-        }
 
         function setEmiView(view, btn) {
             currentEmiView = view;
@@ -628,6 +551,13 @@
             });
             html += `</table>`;
             document.getElementById('emi-table-display').innerHTML = html;
+        }
+
+        function deleteAllTransactions() {
+            if(confirm("⚠️ WARNING: Are you sure you want to delete ALL transactions from your ledger? This cannot be undone!")) {
+                data.transactions = [];
+                refresh();
+            }
         }
 
         function payEMI(id) { const e = data.emis.find(x => x.id == id); const amt = Math.min(e.monthly, e.total - e.paid); if(amt <= 0) return alert("Loan fully paid!"); e.paid += amt; handleNewTransaction(`Loan: ${e.name}`, -amt); }
