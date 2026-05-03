@@ -49,7 +49,7 @@
         th { background: rgba(128,128,128,0.1); font-weight: bold; }
 
         /* MULTI-CHART LAYOUT */
-        .chart-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .chart-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 20px; }
         @media (min-width: 768px) { .chart-grid { grid-template-columns: 1fr 1fr; } }
 
         /* BUTTONS */
@@ -102,6 +102,21 @@
     <div class="main-content">
         <!-- DASHBOARD (LANDING PAGE) -->
         <div id="dashboard-tab" class="tab-content active">
+            
+            <!-- DASHBOARD CHARTS SHIFTED TO TOP -->
+            <div class="chart-grid">
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="dashEmiChart"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="width: 100%; max-width: 250px;">
+                        <canvas id="dashSubChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <div class="card bg-danger-card" style="color:white; text-align:center; padding: 30px;">
                 <button class="download-btn" title="Download Dashboard" onclick="window.print()">⬇️</button>
                 <small>Total Expense (All Time)</small>
@@ -128,25 +143,10 @@
                 </div>
                 <button class="btn-action bg-secondary" onclick="handleNewTransaction()">Add Record</button>
             </div>
-
-            <!-- DASHBOARD CHARTS -->
-            <div class="chart-grid">
-                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div style="width: 100%; max-width: 250px;">
-                        <canvas id="dashEmiChart"></canvas>
-                    </div>
-                </div>
-                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div style="width: 100%; max-width: 250px;">
-                        <canvas id="dashSubChart"></canvas>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- EMI SECTION -->
         <div id="emi-tab" class="tab-content">
-            <!-- UPDATED TO 4 COLUMNS -->
             <div class="hero-row" style="grid-template-columns: repeat(4, 1fr);">
                 <div class="hero-bar bg-accent">
                     <button class="download-btn" title="Download EMI List" onclick="window.print()">⬇️</button>
@@ -370,7 +370,6 @@
                 eHist += e.paid;
                 eRemaining += Math.max(0, e.total - e.paid);
                 
-                // Only count the monthly payment if the loan is not fully paid off
                 if(e.total > e.paid) {
                     eMonthlyTotal += e.monthly;
                 }
@@ -503,11 +502,40 @@
         }
 
         function renderEmiTable() {
-            let html = `<table><tr><th>Loan Name</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Monthly</th><th>Actions</th></tr>`;
-            if (data.emis.length === 0) html += `<tr><td colspan="6" style="text-align:center;">No loans added yet.</td></tr>`;
-            data.emis.forEach(e => {
-                html += `<tr><td><strong>${e.name}</strong></td><td>${fmt(e.total)}</td><td style="color:#2ecc71">${fmt(e.paid)}</td><td style="color:#e74c3c">${fmt(e.total - e.paid)}</td><td>${fmt(e.monthly)}</td><td><button class="paid-btn" onclick="payEMI(${e.id})" style="margin-right:5px">Pay</button><button class="paid-btn" onclick="editEMI(${e.id})" style="background:#3498db">Edit</button></td></tr>`;
-            });
+            // UPDATED: Added Payoff Date column
+            let html = `<table><tr><th>Loan Name</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Monthly</th><th>Payoff Date</th><th>Actions</th></tr>`;
+            if (data.emis.length === 0) {
+                html += `<tr><td colspan="7" style="text-align:center;">No loans added yet.</td></tr>`;
+            } else {
+                const now = new Date();
+                
+                data.emis.forEach(e => {
+                    let remaining = Math.max(0, e.total - e.paid);
+                    let payoffText = "Paid Off";
+                    
+                    // FORECASTER MATH ENGINE
+                    if (remaining > 0 && e.monthly > 0) {
+                        let monthsLeft = Math.ceil(remaining / e.monthly);
+                        let payoffDate = new Date(now.getFullYear(), now.getMonth() + monthsLeft, 1);
+                        payoffText = payoffDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+                    } else if (remaining > 0 && e.monthly <= 0) {
+                        payoffText = "N/A";
+                    }
+
+                    html += `<tr>
+                        <td><strong>${e.name}</strong></td>
+                        <td>${fmt(e.total)}</td>
+                        <td style="color:#2ecc71">${fmt(e.paid)}</td>
+                        <td style="color:#e74c3c">${fmt(remaining)}</td>
+                        <td>${fmt(e.monthly)}</td>
+                        <td style="font-weight:bold; color:var(--secondary);">${payoffText}</td>
+                        <td>
+                            <button class="paid-btn" onclick="payEMI(${e.id})" style="margin-right:5px">Pay</button>
+                            <button class="paid-btn" onclick="editEMI(${e.id})" style="background:#3498db">Edit</button>
+                        </td>
+                    </tr>`;
+                });
+            }
             html += `</table>`;
             document.getElementById('emi-table-display').innerHTML = html;
         }
